@@ -1,12 +1,14 @@
-use databroker_proto::kuksa::val::v1::{DataType, SubscribeRequest};
-use databroker_proto::kuksa::val::v1::{Datapoint, EntryUpdate, Field, SetRequest, View};
+use std::collections::HashMap;
+
+use databroker_proto::kuksa::val::v1::SubscribeEntry;
+use databroker_proto::kuksa::val::v1::SubscribeResponse;
 use databroker_proto::kuksa::val::v1::{
     val_client::ValClient, DataEntry, EntryRequest, Error, GetRequest,
 };
-use databroker_proto::kuksa::val::v1::SubscribeEntry;
+use databroker_proto::kuksa::val::v1::{DataType, SubscribeRequest};
+use databroker_proto::kuksa::val::v1::{Datapoint, EntryUpdate, Field, SetRequest, View};
 use tonic::Request;
 use tonic::Streaming;
-use databroker_proto::kuksa::val::v1::SubscribeResponse;
 
 use crate::common::{str_to_value, ClientError};
 
@@ -38,9 +40,11 @@ impl KuksaClient {
             Ok(response) => {
                 let metadata = response.into_inner();
 
+                println!("Metadata response from server:\n{:?}\n", metadata);
+
                 if metadata.entries.len() != 1 {
                     // no entry found/not a leaf --> get err message from response
-                    println!("len = {}", metadata.entries.len());
+                    println!("len = {}\n", metadata.entries.len());
                     return Err(ClientError::Function(vec![]));
                 };
 
@@ -74,64 +78,48 @@ impl KuksaClient {
     pub async fn get_entries_data(
         &self,
         entries_path: Vec<&str>,
-    ) -> Result<Vec<DataEntry>, ClientError> {
+    ) -> Result<HashMap<String, Option<Datapoint>>, ClientError> {
+        // TODO: return a hash map (path: value);
+        // if any error in response --> ignore this error
+
         println!("------ get_entries_data:");
-        println!("entries_path: {:?}", entries_path);
+        println!("entries_path: {:?}\n", entries_path);
 
-        // create a ValClient and connect server
-        let mut client = ValClient::connect(self.server_address.clone())
-            .await
-            .unwrap();
+        if let Ok(mut client) = ValClient::connect(self.server_address.clone()).await {
+            let mut entries = vec![];
 
-        let mut result = Vec::new();
-
-        // get data of each entry
-        for entry_path in entries_path {
-            // &str --> GetRequest
-            let request = GetRequest {
-                entries: vec![EntryRequest {
+            for entry_path in entries_path {
+                entries.push(EntryRequest {
                     path: entry_path.to_string(),
                     view: View::CurrentValue.into(),
                     fields: vec![Field::Value.into()],
-                }],
-            };
-
-            // call GET method
+                });
+            }
+            let request = GetRequest { entries };
             match client.get(Request::new(request)).await {
                 Ok(response) => {
-                    let mut message = response.into_inner();
-                    let mut errors = Vec::new();
+                    let entries = response.into_inner().entries;
+                    let mut result = HashMap::new();
 
-                    // why we need both of error and errors
-                    if let Some(err) = message.error {
-                        errors.push(err);
+                    for entry in entries {
+                        result.insert(entry.path, entry.value);
                     }
 
-                    for error in message.errors {
-                        if let Some(err) = error.error {
-                            errors.push(err);
-                        }
-                    }
-
-                    if !errors.is_empty() {
-                        return Err(ClientError::Function(errors));
-                    } else {
-                        result.append(&mut message.entries);
-                    }
+                    Ok(result)
                 }
-                Err(err) => {
-                    return Err(ClientError::Status(err));
-                }
+                Err(error) => Err(ClientError::Status(error)),
             }
         }
-
-        Ok(result)
+        else {
+            Err(ClientError::Connection("Can not connect ValClient".to_string()))
+        }
     }
 
     pub async fn publish_entry_data(&self, entry_path: &str, value: &str) -> Result<(), Error> {
         println!("------ publish_entry_data:");
         println!("entry_path: {:?}", entry_path);
         println!("value: {:?}", value);
+        println!();
 
         // create a ValClient and connect server
         // create a ValClient and connect server
@@ -162,15 +150,15 @@ impl KuksaClient {
                     }],
                 };
 
-                println!("{:?}", request);
+                println!("{:?}\n", request);
 
                 // call PUBLISH method
                 let response = client.set(request).await.unwrap().into_inner();
 
                 // parse response and return () or Error
-                println!("Publish response: {:?}", response);
+                println!("Publish response from server:\n{:?}\n", response);
                 return Ok(());
-            },
+            }
             Err(_err) => {
                 // return METADATA error
                 return Err(Error {
@@ -182,13 +170,18 @@ impl KuksaClient {
         }
     }
 
-    pub async fn subscribe_entries(&self, entries_path: Vec<&str>) -> Result<Streaming<SubscribeResponse>, ClientError> {
+    pub async fn subscribe_entries(
+        &self,
+        entries_path: Vec<&str>,
+    ) -> Result<Streaming<SubscribeResponse>, ClientError> {
         println!("------ subcribe entries:");
         println!("entries_path: {:?}", entries_path);
 
         // create ValClient
-        let mut client = ValClient::connect(self.server_address.clone()).await.unwrap();
-        
+        let mut client = ValClient::connect(self.server_address.clone())
+            .await
+            .unwrap();
+
         // entries_path --> SubscribeRequest
         let mut entries = Vec::new();
 
@@ -200,12 +193,12 @@ impl KuksaClient {
             })
         }
 
-        let request = SubscribeRequest{ entries };
+        let request = SubscribeRequest { entries };
 
         // call subcribes method
         match client.subscribe(request).await {
             Ok(response) => {
-                return Ok(response.into_inner()); // return response stream 
+                return Ok(response.into_inner()); // return response stream
             }
             Err(err) => {
                 return Err(ClientError::Status(err));

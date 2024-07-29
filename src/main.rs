@@ -5,21 +5,24 @@ use tokio;
 async fn main() {
     let vehicle = KuksaClient::new("http://127.0.0.1:55555");
 
-    // >>>> TEST GET ENTRIES DATA
+    // >>>> TEST GET DATATYPE
     // match vehicle.get_datatype("Vehicle.ADAS.ABS").await {
     //     Ok(datatype) => println!("Datatype: {:?}", datatype),
     //     Err(err) => println!("Error: {:?}", err),
     // }
-    
-    // >>>> TEST PUBLISH LEAF ENTRY
-    let publish_response = vehicle.publish_entry_data(
-        "Vehicle.Speed", 
-        "100001"
-    ).await;
-    println!("{:?}", publish_response);
 
-    let get_response = vehicle.get_entries_data(vec!["Vehicle.ADAS.ABS", "Vehicle.Speed"]).await;
-    println!("{:?}", get_response);
+    // >>>> TEST GET ENTRIES DATA
+    let get_response = vehicle
+        .get_entries_data(vec!["Vehicle.ADAS.ABS", "Vehicle.Speed"])
+        .await;
+    println!("[main] Get response:\n{:?}\n", get_response);
+
+    // // >>>> TEST PUBLISH LEAF ENTRY
+    // let publish_response = vehicle.publish_entry_data(
+    //     "Vehicle.Speed",
+    //     "100001"
+    // ).await;
+    // println!("{:?}", publish_response);
 
     // // >>>> TEST SUBSCRIBE ENTRIES
     // match vehicle.subscribe_entries(vec!["Vehicle.Speed", "Vehicle.ADAS.ABS"]).await {
@@ -37,7 +40,7 @@ async fn main() {
     //                     Ok(response) => {
     //                         match response {
     //                             None => {
-    //                                 // The stream was closed by the sender 
+    //                                 // The stream was closed by the sender
     //                                 // and no more messages will be delivered
     //                                 println!("[None] Server gone");
     //                                 break;
@@ -49,7 +52,7 @@ async fn main() {
     //                         }
     //                     }
     //                     Err(err) => {
-    //                         // a gRPC error was sent by the sender instead of a valid response message. 
+    //                         // a gRPC error was sent by the sender instead of a valid response message.
     //                         // Refer to Status::code and Status::message to examine possible error causes.
     //                         println!("[Error] {:?}", err);
     //                     }
