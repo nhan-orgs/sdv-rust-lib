@@ -92,7 +92,7 @@ impl KuksaClient {
                 entries: vec![EntryRequest {
                     path: entry_path.to_string(),
                     view: View::CurrentValue.into(),
-                    fields: vec![Field::Metadata.into(), Field::Value.into()],
+                    fields: vec![Field::Value.into()],
                 }],
             };
 
@@ -148,7 +148,7 @@ impl KuksaClient {
                 // convert entry_path and value from &str into PUBLISH request
                 let request = SetRequest {
                     updates: vec![EntryUpdate {
-                        fields: vec![Field::Value as i32, Field::Path as i32],
+                        fields: vec![Field::Value as i32],
                         entry: Some(DataEntry {
                             path: entry_path.to_string(),
                             value: Some(Datapoint {
@@ -196,7 +196,7 @@ impl KuksaClient {
             entries.push(SubscribeEntry {
                 path: entry_path.to_string(),
                 view: View::CurrentValue.into(),
-                fields: vec![Field::Value.into(), Field::Metadata.into()],
+                fields: vec![Field::Value.into()],
             })
         }
 
