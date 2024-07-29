@@ -19,8 +19,8 @@ async fn main() {
 
     // >>>> TEST PUBLISH LEAF ENTRY
     let publish_response = vehicle.publish_entry_data(
-        "Vehicle.Speed",
-        "100001a"
+        "Vehicle.ADAS",
+        "10005"
     ).await;
     println!("{:?}", publish_response);
 

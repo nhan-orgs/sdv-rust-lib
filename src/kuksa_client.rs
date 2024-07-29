@@ -74,6 +74,42 @@ impl KuksaClient {
         }
     }
 
+    pub async fn set(&self, entries: Vec<EntryUpdate>) -> Result<(), ClientError> {
+        if let Ok(mut client) = ValClient::connect(self.server_address.clone()).await {
+            let request = SetRequest { updates: entries };
+
+            match client.set(request).await {
+                Ok(response) => {
+                    let message = response.into_inner();
+
+                    // collect errors from response
+                    let mut errors = vec![];
+
+                    if let Some(err) = message.error {
+                        errors.push(err);
+                    }
+
+                    for error in message.errors {
+                        if let Some(err) = error.error {
+                            errors.push(err);
+                        }
+                    }
+
+                    if errors.len() > 0 {
+                        return Err(ClientError::Function(errors));
+                    } else {
+                        return Ok(());
+                    }
+                }
+                Err(err) => return Err(ClientError::Status(err)),
+            }
+        } else {
+            Err(ClientError::Connection(
+                "Can not connect ValClient".to_string(),
+            ))
+        }
+    }
+
     pub async fn get_datatype(&self, entry_path: &str) -> Result<DataType, ClientError> {
         let mut client = ValClient::connect(self.server_address.clone())
             .await
@@ -171,77 +207,45 @@ impl KuksaClient {
         println!("value: {:?}", value);
         println!();
 
-        if let Ok(mut client) = ValClient::connect(self.server_address.clone()).await {
-            // get entry datatype
-            match self.get_datatype(entry_path).await {
-                Ok(datatype) => {
-                    // datatype to value
-                    match str_to_value(value, datatype) {
-                        Ok(entry_value) => {
-                            // convert entry_path and value from &str into PUBLISH request
-                            let request = SetRequest {
-                                updates: vec![EntryUpdate {
-                                    fields: vec![Field::Value as i32],
-                                    entry: Some(DataEntry {
-                                        path: entry_path.to_string(),
-                                        value: Some(Datapoint {
-                                            timestamp: Some(std::time::SystemTime::now().into()),
-                                            value: Some(entry_value),
-                                        }),
-                                        metadata: None,
-                                        actuator_target: None,
-                                    }),
-                                }],
-                            };
+        match self.get_datatype(entry_path).await {
+            Ok(datatype) => {
+                // datatype to value
+                match str_to_value(value, datatype) {
+                    Ok(entry_value) => {
+                        let entry = EntryUpdate {
+                            fields: vec![Field::Value as i32],
+                            entry: Some(DataEntry {
+                                path: entry_path.to_string(),
+                                value: Some(Datapoint {
+                                    timestamp: Some(std::time::SystemTime::now().into()),
+                                    value: Some(entry_value),
+                                }),
+                                metadata: None,
+                                actuator_target: None,
+                            }),
+                        };
 
-                            // call PUBLISH method
-                            match client.set(request).await {
-                                Ok(response) => {
-                                    let message = response.into_inner();
-
-                                    // collect errors from response
-                                    let mut errors = vec![];
-
-                                    if let Some(err) = message.error {
-                                        errors.push(err);
-                                    }
-
-                                    for error in message.errors {
-                                        if let Some(err) = error.error {
-                                            errors.push(err);
-                                        }
-                                    }
-
-                                    // check if return error or entries' value
-                                    println!("Errors:\n{:?}\n", errors);
-
-                                    if errors.len() > 0 {
-                                        return Err(ClientError::Function(errors));
-                                    } else {
-                                        return Ok(());
-                                    }
-                                }
-                                Err(err) => return Err(ClientError::Status(err)),
-                            }
+                        if let Err(error) = self.set(vec![entry]).await {
+                            return Err(error);
                         }
-                        Err(_) => {
-                            return Err(ClientError::Function(vec![Error {
-                                code: 400,
-                                reason: "Convert data value error".to_string(),
-                                message: "Can not convert string to {$datatype}".to_string(),
-                            }]));
-                        }
+
+                        Ok(())
+                    }
+
+                    Err(_) => {
+                        return Err(ClientError::Function(vec![Error {
+                            code: 400,
+                            reason: "Convert data value error".to_string(),
+                            message: "Can not convert string to {$datatype}".to_string(),
+                        }]));
                     }
                 }
-                Err(err) => {
-                    // return METADATA error
-                    return Err(err);
-                }
             }
-        } else {
-            Err(ClientError::Connection(
-                "Can not connect ValClient".to_string(),
-            ))
+
+            Err(err) => {
+                // return METADATA error
+                return Err(err);
+            }
         }
     }
 
