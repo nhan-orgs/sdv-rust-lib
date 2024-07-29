@@ -23,6 +23,56 @@ impl KuksaClient {
         }
     }
 
+    pub async fn get(
+        &self,
+        path: &str,
+        view: i32,
+        fields: Vec<i32>,
+    ) -> Result<Vec<DataEntry>, ClientError> {
+        if let Ok(mut client) = ValClient::connect(self.server_address.clone()).await {
+            let request = GetRequest {
+                entries: vec![EntryRequest {
+                    path: path.to_string(),
+                    view: view,
+                    fields: fields,
+                }],
+            };
+
+            match client.get(Request::new(request)).await {
+                Ok(response) => {
+                    let message = response.into_inner();
+
+                    // collect errors from response
+                    let mut errors = vec![];
+
+                    if let Some(err) = message.error {
+                        errors.push(err);
+                    }
+
+                    for error in message.errors {
+                        if let Some(err) = error.error {
+                            errors.push(err);
+                        }
+                    }
+
+                    // check if return error or entries' value
+                    if errors.len() > 0 {
+                        return Err(ClientError::Function(errors));
+                    } else {
+                        return Ok(message.entries);
+                    }
+                }
+                Err(error) => {
+                    return Err(ClientError::Status(error));
+                }
+            }
+        } else {
+            return Err(ClientError::Connection(
+                "Can not connect ValClient".to_string(),
+            ));
+        }
+    }
+
     pub async fn get_datatype(&self, entry_path: &str) -> Result<DataType, ClientError> {
         let mut client = ValClient::connect(self.server_address.clone())
             .await
@@ -79,44 +129,39 @@ impl KuksaClient {
         &self,
         entries_path: Vec<&str>,
     ) -> Result<HashMap<String, Option<Datapoint>>, ClientError> {
-        // TODO: return a hash map (path: value);
-        // if any error in response --> ignore this error
+        // get data of list entries
+        // return a hash map (path: value);
 
         println!("------ get_entries_data:");
         println!("entries_path: {:?}\n", entries_path);
 
-        if let Ok(mut client) = ValClient::connect(self.server_address.clone()).await {
-            let mut entries = vec![];
+        let mut result = HashMap::new();
 
-            for entry_path in entries_path {
-                entries.push(EntryRequest {
-                    path: entry_path.to_string(),
-                    view: View::CurrentValue.into(),
-                    fields: vec![Field::Value.into()],
-                });
-            }
-            let request = GetRequest { entries };
-            match client.get(Request::new(request)).await {
-                Ok(response) => {
-                    let entries = response.into_inner().entries;
-                    let mut result = HashMap::new();
-
+        for entry_path in entries_path {
+            match self
+                .get(
+                    entry_path,
+                    View::CurrentValue.into(),
+                    vec![Field::Value.into()],
+                )
+                .await
+            {
+                Ok(entries) => {
                     for entry in entries {
                         result.insert(entry.path, entry.value);
                     }
-
-                    Ok(result)
                 }
-                Err(error) => Err(ClientError::Status(error)),
+                Err(error) => {
+                    return Err(error);
+                }
             }
         }
-        else {
-            Err(ClientError::Connection("Can not connect ValClient".to_string()))
-        }
+
+        Ok(result)
     }
 
     pub async fn publish_entry_data(&self, entry_path: &str, value: &str) -> Result<(), Error> {
-        println!("------ publish_entry_data:");
+        println!("------ publish_entry_data: ");
         println!("entry_path: {:?}", entry_path);
         println!("value: {:?}", value);
         println!();
