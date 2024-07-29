@@ -4,6 +4,12 @@ use tokio;
 #[tokio::main]
 async fn main() {
     let vehicle = KuksaClient::new("http://127.0.0.1:55555");
+    
+    // // >>>> TEST GET ENTRIES DATA
+    // let get_response = vehicle
+    //     .get_entries_data(vec!["Vehicle.ADAS.ABS", "Vehicle.Speed"])
+    //     .await;
+    // println!("[main] Get response:\n{:?}\n", get_response);
 
     // >>>> TEST GET DATATYPE
     // match vehicle.get_datatype("Vehicle.ADAS.ABS").await {
@@ -11,18 +17,12 @@ async fn main() {
     //     Err(err) => println!("Error: {:?}", err),
     // }
 
-    // >>>> TEST GET ENTRIES DATA
-    let get_response = vehicle
-        .get_entries_data(vec!["Vehicle.ADAS.ABS", "Vehicle.Speed"])
-        .await;
-    println!("[main] Get response:\n{:?}\n", get_response);
-
-    // // >>>> TEST PUBLISH LEAF ENTRY
-    // let publish_response = vehicle.publish_entry_data(
-    //     "Vehicle.Speed",
-    //     "100001"
-    // ).await;
-    // println!("{:?}", publish_response);
+    // >>>> TEST PUBLISH LEAF ENTRY
+    let publish_response = vehicle.publish_entry_data(
+        "Vehicle.Speed",
+        "100001a"
+    ).await;
+    println!("{:?}", publish_response);
 
     // // >>>> TEST SUBSCRIBE ENTRIES
     // match vehicle.subscribe_entries(vec!["Vehicle.Speed", "Vehicle.ADAS.ABS"]).await {
