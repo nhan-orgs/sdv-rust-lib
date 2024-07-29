@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use databroker_proto::kuksa::val::v1::Error;
+use databroker_proto::kuksa::val::v1::Metadata;
 use databroker_proto::kuksa::val::v1::SubscribeEntry;
 use databroker_proto::kuksa::val::v1::SubscribeResponse;
 use databroker_proto::kuksa::val::v1::{
@@ -110,54 +111,61 @@ impl KuksaClient {
         }
     }
 
-    pub async fn get_datatype(&self, entry_path: &str) -> Result<DataType, ClientError> {
-        let mut client = ValClient::connect(self.server_address.clone())
+    pub async fn get_metadata(
+        &self,
+        entry_path: &str,
+    ) -> Result<HashMap<String, Metadata>, ClientError> {
+        match self
+            .get(
+                entry_path,
+                View::Metadata.into(),
+                vec![Field::Metadata.into()],
+            )
             .await
-            .unwrap();
-
-        let request = GetRequest {
-            entries: vec![EntryRequest {
-                path: entry_path.to_string(),
-                view: View::Metadata.into(),
-                fields: vec![Field::Metadata.into()],
-            }],
-        };
-
-        match client.get(Request::new(request)).await {
+        {
             Ok(response) => {
-                let metadata = response.into_inner();
+                let mut result = HashMap::new();
+                let data_entries = response.into_iter();
 
-                println!("Metadata response from server:\n{:?}\n", metadata);
-
-                if metadata.entries.len() != 1 {
-                    println!("len = {}\n", metadata.entries.len());
-                    println!("no entry found/not a leaf --> get err message from response");
-                    return Err(ClientError::Function(vec![]));
-                };
-
-                match &metadata.entries[0].metadata {
-                    Some(data) => {
-                        // exist metadata
-                        match DataType::try_from(data.data_type) {
-                            Ok(datatype) => {
-                                // get datatype sucessfully
-                                return Ok(datatype);
-                            }
-                            Err(_err) => {
-                                println!("can not convert i32 to Datatype");
-                                return Err(ClientError::Function(vec![]));
-                            }
-                        }
-                    }
-                    None => {
-                        // no metadata found
-                        return Err(ClientError::Function(vec![]));
+                for data_entry in data_entries {
+                    if let Some(metadata) = data_entry.metadata {
+                        result.insert(data_entry.path, metadata);
                     }
                 }
+
+                Ok(result)
             }
-            Err(status) => {
+            Err(error) => {
                 // Err: can not access GET METADATA method
-                Err(ClientError::Status(status))
+                return Err(error);
+            }
+        }
+    }
+
+    pub async fn get_datatype(
+        &self,
+        entry_path: &str,
+    ) -> Result<HashMap<String, DataType>, ClientError> {
+        match self.get_metadata(entry_path).await {
+            Ok(metadatas) => {
+                let mut result = HashMap::new();
+
+                for metadata in metadatas {
+                    match DataType::try_from(metadata.1.data_type) {
+                        Ok(datatype) => {
+                            result.insert(metadata.0, datatype);
+                        },
+                        Err(_error) => {
+                            println!("Decode error:  DataType::try_from() failed");
+                            return Err(ClientError::Function(vec![]));
+                        }
+                    }
+                }
+
+                Ok(result)
+            }
+            Err(error) => {
+                return Err(error);
             }
         }
     }
@@ -210,7 +218,8 @@ impl KuksaClient {
         match self.get_datatype(entry_path).await {
             Ok(datatype) => {
                 // datatype to value
-                match str_to_value(value, datatype) {
+                // TODO: check if entry_path exist in datatype hashmap
+                match str_to_value(value, datatype[entry_path]) {
                     Ok(entry_value) => {
                         let entry = EntryUpdate {
                             fields: vec![Field::Value as i32],

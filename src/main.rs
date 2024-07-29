@@ -11,16 +11,26 @@ async fn main() {
     //     .await;
     // println!("[main] Get response:\n{:?}\n", get_response);
 
-    // >>>> TEST GET DATATYPE
-    // match vehicle.get_datatype("Vehicle.ADAS.ABS").await {
+    // // >>>> TEST GET METADATA
+    // match vehicle.get_metadata("Vehicle.Speed").await {
+    //     Ok(metadatas) => {
+    //         for metadata in metadatas {
+    //             println!("\n{:?}\n", metadata);
+    //         }
+    //     },
+    //     Err(err) => println!("Error: {:?}", err),
+    // }
+
+    // // >>>> TEST GET DATATYPE
+    // match vehicle.get_datatype("Vehicle.Speed").await {
     //     Ok(datatype) => println!("Datatype: {:?}", datatype),
     //     Err(err) => println!("Error: {:?}", err),
     // }
 
     // >>>> TEST PUBLISH LEAF ENTRY
     let publish_response = vehicle.publish_entry_data(
-        "Vehicle.ADAS",
-        "10005"
+        "Vehicle.Speed",
+        "105"
     ).await;
     println!("{:?}", publish_response);
 
