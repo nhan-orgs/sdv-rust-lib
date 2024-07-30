@@ -1,16 +1,14 @@
-use std::collections::HashMap;
-
-use databroker_proto::kuksa::val::v1::Error;
-use databroker_proto::kuksa::val::v1::Metadata;
-use databroker_proto::kuksa::val::v1::SubscribeEntry;
-use databroker_proto::kuksa::val::v1::SubscribeResponse;
-use databroker_proto::kuksa::val::v1::{
-    val_client::ValClient, DataEntry, EntryRequest, GetRequest,
-};
-use databroker_proto::kuksa::val::v1::{DataType, SubscribeRequest};
-use databroker_proto::kuksa::val::v1::{Datapoint, EntryUpdate, Field, SetRequest, View};
 use tonic::Request;
 use tonic::Streaming;
+use std::collections::HashMap;
+
+use databroker_proto::kuksa::val::v1::val_client::ValClient;
+use databroker_proto::kuksa::val::v1::Error;
+use databroker_proto::kuksa::val::v1::{ Field, View, Metadata };
+use databroker_proto::kuksa::val::v1::{ DataEntry, DataType, Datapoint };
+use databroker_proto::kuksa::val::v1::{ EntryRequest, EntryUpdate };
+use databroker_proto::kuksa::val::v1::{ GetRequest, SetRequest };
+use databroker_proto::kuksa::val::v1::{ SubscribeEntry, SubscribeRequest, SubscribeResponse };
 
 use crate::common::{str_to_value, ClientError};
 
