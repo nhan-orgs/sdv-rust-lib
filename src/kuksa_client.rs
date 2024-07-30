@@ -218,7 +218,17 @@ impl KuksaClient {
         match self.get_datatype(entry_path).await {
             Ok(datatype) => {
                 // datatype to value
-                // TODO: check if entry_path exist in datatype hashmap
+                // check if entry_path exist in datatype hashmap
+                if !datatype.contains_key(entry_path) {
+                    return Err(ClientError::Function(vec![
+                        Error{
+                            code: 401,
+                            reason: "Error retrieve metadata".to_string(),
+                            message: "Can not found metadata for path, path maybe not a leaf entry".to_string(),
+                        }
+                    ]));
+                }
+
                 match str_to_value(value, datatype[entry_path]) {
                     Ok(entry_value) => {
                         let entry = EntryUpdate {
