@@ -168,6 +168,32 @@ impl KuksaClient {
         }
     }
 
+    pub async fn get_entry_data(&self, path: &str) -> Result<Option<Datapoint>, ClientError> {
+        // get data of a leaf entry
+        println!("------ get_entry_data:");
+        println!("entry_path: {:?}\n", path);
+
+        match self
+            .get(path, View::CurrentValue.into(), vec![Field::Value.into()])
+            .await
+        {
+            Ok(entries) => {
+                if entries.len() != 1 {
+                    return Err(ClientError::Function(vec![Error {
+                        code: 400,
+                        reason: "Path is not a leaf entry".to_string(),
+                        message: "Ensure your path is a sensor/actuator".to_string(),
+                    }]));
+                } else {
+                    return Ok(entries[0].value.clone());
+                }
+            }
+            Err(error) => {
+                return Err(error);
+            }
+        }
+    }
+
     pub async fn get_entries_data(
         &self,
         entries_path: Vec<&str>,
