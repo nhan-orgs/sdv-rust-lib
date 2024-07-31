@@ -1,7 +1,9 @@
 [package]
-name = "simple-client"
+name = "simple-kuksa-client"
 version = "0.1.0"
 edition = "2021"
+description = "A simple Kuksa Client. suports get/set/subscribe sensors and actuators"
+license = "MIT"
 
 [dependencies]
 clap = { version="4.2", features = [

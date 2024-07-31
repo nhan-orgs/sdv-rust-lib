@@ -1,5 +1,4 @@
-use simple_client::common;
-use simple_client::KuksaClient;
+use simple_kuksa_client::{KuksaClient, common};
 use tokio;
 
 #[tokio::main]
@@ -30,22 +29,22 @@ async fn main() {
     //     Err(err) => println!("Error: {:?}", err),
     // }
 
-    // // >>>> [DONE] TEST GET ENTRY DATA
+    // >>>> [DONE] TEST GET ENTRY DATA
     // only leaf entry
-    // let path = "Vehicle.ADAS.ABS.IsEnabled";
-    // match vehicle.get_entry_data(path).await {
-    //     Ok(data_value) => {
-    //         let value = common::value_from_option_datapoint(data_value);
-    //         println!("{}: {:?}", path, value);
-    //     }
-    //     Err(error) => {
-    //         println!("Get entries value failed: {:?}", error);
-    //     }
-    // }
+    let path = "Vehicle.ADAS.ABS.IsEnabled";
+    match vehicle.get_entry_data(path).await {
+        Ok(data_value) => {
+            let value = common::value_from_option_datapoint(data_value);
+            println!("{}: {:?}", path, value);
+        }
+        Err(error) => {
+            println!("Get entries value failed: {:?}", error);
+        }
+    }
 
     // // >>>> [DONE] TEST GET ENTRIES DATA
     // only leaf entry
-    // let paths = vec!["Vehicle.ADAS.ABS.IsEnabled", "Vehicle.Sped"];
+    // let paths = vec!["Vehicle.ADAS.ABS", "Vehicle.Speed"];
     // match vehicle.get_entries_data(paths.clone()).await {
     //     Ok(response) => {
     //         println!(">>> Get entries' value in paths '{:?}'\n", paths);
@@ -62,7 +61,7 @@ async fn main() {
     // // >>>> [DONE] TEST PUBLISH LEAF ENTRY
     // match vehicle.publish_entry_data(
     //     "Vehicle.ADAS.ABS.IsEnabled",
-    //     "false"
+    //     "true"
     // ).await {
     //     Ok(_) => {
     //         println!("Publish done!");
@@ -93,9 +92,7 @@ async fn main() {
     //                             }
     //                             Some(message) => {
     //                                 // The sender streamed a valid response message val
-
     //                                 println!("[Message]");
-
     //                                 for entry in message.updates {
     //                                     println!("\n{:?}\n", entry);
     //                                 }

@@ -22,7 +22,7 @@ impl KuksaClient {
             server_address: server_address.to_string(),
         }
     }
-
+    
     pub async fn get(
         &self,
         path: &str,
