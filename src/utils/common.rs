@@ -1,4 +1,4 @@
-use databroker_proto::kuksa::val::v1::{datapoint::Value, DataType, Error};
+use databroker_proto::kuksa::val::v1::{datapoint::Value, DataType, Datapoint, Error};
 
 #[derive(Debug, Clone)]
 pub enum ClientError {
@@ -107,4 +107,13 @@ pub fn str_to_value(input: &str, datatype: DataType) -> Result<Value, ()> {
         DataType::DoubleArray => todo!(),
         DataType::TimestampArray => todo!(),
     }
+}
+
+pub fn value_from_option_datapoint(datapoint: Option<Datapoint>) -> Value {
+    if let Some(data) = datapoint {
+        if let Some(value) = data.value {
+            return value;
+        }
+    }
+    return Value::String("NotAvailable".to_string());
 }

@@ -1,14 +1,14 @@
+use std::collections::HashMap;
 use tonic::Request;
 use tonic::Streaming;
-use std::collections::HashMap;
 
 use databroker_proto::kuksa::val::v1::val_client::ValClient;
 use databroker_proto::kuksa::val::v1::Error;
-use databroker_proto::kuksa::val::v1::{ Field, View, Metadata };
-use databroker_proto::kuksa::val::v1::{ DataEntry, DataType, Datapoint };
-use databroker_proto::kuksa::val::v1::{ EntryRequest, EntryUpdate };
-use databroker_proto::kuksa::val::v1::{ GetRequest, SetRequest };
-use databroker_proto::kuksa::val::v1::{ SubscribeEntry, SubscribeRequest, SubscribeResponse };
+use databroker_proto::kuksa::val::v1::{DataEntry, DataType, Datapoint};
+use databroker_proto::kuksa::val::v1::{EntryRequest, EntryUpdate};
+use databroker_proto::kuksa::val::v1::{Field, Metadata, View};
+use databroker_proto::kuksa::val::v1::{GetRequest, SetRequest};
+use databroker_proto::kuksa::val::v1::{SubscribeEntry, SubscribeRequest, SubscribeResponse};
 
 use crate::common::{str_to_value, ClientError};
 
@@ -152,7 +152,7 @@ impl KuksaClient {
                     match DataType::try_from(metadata.1.data_type) {
                         Ok(datatype) => {
                             result.insert(metadata.0, datatype);
-                        },
+                        }
                         Err(_error) => {
                             println!("Decode error:  DataType::try_from() failed");
                             return Err(ClientError::Function(vec![]));
@@ -218,13 +218,12 @@ impl KuksaClient {
                 // datatype to value
                 // check if entry_path exist in datatype hashmap
                 if !datatype.contains_key(entry_path) {
-                    return Err(ClientError::Function(vec![
-                        Error{
-                            code: 401,
-                            reason: "Error retrieve metadata".to_string(),
-                            message: "Can not found metadata for path, path maybe not a leaf entry".to_string(),
-                        }
-                    ]));
+                    return Err(ClientError::Function(vec![Error {
+                        code: 401,
+                        reason: "Error retrieve metadata".to_string(),
+                        message: "Can not found metadata for path, path maybe not a leaf entry"
+                            .to_string(),
+                    }]));
                 }
 
                 match str_to_value(value, datatype[entry_path]) {
@@ -274,30 +273,35 @@ impl KuksaClient {
         println!("entries_path: {:?}", entries_path);
 
         // create ValClient
-        let mut client = ValClient::connect(self.server_address.clone())
-            .await
-            .unwrap();
+        match ValClient::connect(self.server_address.clone()).await {
+            Ok(mut client) => {
+                // entries_path --> SubscribeRequest
+                let mut entries = Vec::new();
 
-        // entries_path --> SubscribeRequest
-        let mut entries = Vec::new();
+                for entry_path in entries_path {
+                    entries.push(SubscribeEntry {
+                        path: entry_path.to_string(),
+                        view: View::CurrentValue.into(),
+                        fields: vec![Field::Value.into()],
+                    })
+                }
 
-        for entry_path in entries_path {
-            entries.push(SubscribeEntry {
-                path: entry_path.to_string(),
-                view: View::CurrentValue.into(),
-                fields: vec![Field::Value.into()],
-            })
-        }
+                let request = SubscribeRequest { entries };
 
-        let request = SubscribeRequest { entries };
-
-        // call subcribes method
-        match client.subscribe(request).await {
-            Ok(response) => {
-                return Ok(response.into_inner()); // return response stream
+                // call subcribes method
+                match client.subscribe(request).await {
+                    Ok(response) => {
+                        return Ok(response.into_inner());
+                    }
+                    Err(err) => {
+                        return Err(ClientError::Status(err));
+                    }
+                }
             }
-            Err(err) => {
-                return Err(ClientError::Status(err));
+            Err(_) => {
+                return Err(ClientError::Connection(
+                    "Can not connect ValClient".to_string(),
+                ));
             }
         }
     }

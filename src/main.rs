@@ -1,4 +1,5 @@
 use simple_client::KuksaClient;
+use simple_client::common;
 use tokio;
 
 #[tokio::main]
@@ -30,18 +31,20 @@ async fn main() {
     // }
 
     // // >>>> [DONE] TEST GET ENTRIES DATA
-    // let paths = vec!["Vehicle.ADAS.ABS", "Vehicle.Speed"];
-    // match vehicle.get_entries_data(paths.clone()).await {
-    //     Ok(response) => {
-    //         println!(">>> Get entries' value in paths '{:?}'\n", paths);
-    //         for data_value in response {
-    //             println!("{}: {:?}", data_value.0, data_value.1);
-    //         }
-    //     },
-    //     Err(error) => {
-    //         println!("Get entries value failed: {:?}", error);
-    //     }
-    // }
+    // only leaf entry
+    let paths = vec!["Vehicle.ADAS.ABS.IsEnabled", "Vehicle.Sped"];
+    match vehicle.get_entries_data(paths.clone()).await {
+        Ok(response) => {
+            println!(">>> Get entries' value in paths '{:?}'\n", paths);
+            for data_value in response {
+                let value = common::value_from_option_datapoint(data_value.1);
+                println!("{}: {:?}", data_value.0, value);
+            }
+        },
+        Err(error) => {
+            println!("Get entries value failed: {:?}", error);
+        }
+    }
 
     // // >>>> [DONE] TEST PUBLISH LEAF ENTRY
     // match vehicle.publish_entry_data(
@@ -57,41 +60,43 @@ async fn main() {
     // }
 
     // // >>>> TEST SUBSCRIBE ENTRIES
-    // match vehicle.subscribe_entries(vec!["Vehicle.Speed", "Vehicle.ADAS.ABS"]).await {
-    //     // how to keep the client (ValClient) alive
-    //     Ok(mut response_stream) => {
-    //         println!("{:?}", response_stream);
-    //         tokio::spawn(async move {
-    //             let mut i = 0;
-    //             loop {
-    //                 i = i + 1;
-    //                 print!("\n>>> {}: ", i);
-    //                 match response_stream.message().await {
-    //                     Ok(response) => {
-    //                         match response {
-    //                             None => {
-    //                                 // The stream was closed by the sender
-    //                                 // and no more messages will be delivered
-    //                                 println!("[None] Server gone");
-    //                                 break;
-    //                             },
-    //                             Some(message) => {
-    //                                 // The sender streamed a valid response message val
-    //                                 println!("[Message] {:?}", message);
-    //                             }
-    //                         }
-    //                     }
-    //                     Err(err) => {
-    //                         // a gRPC error was sent by the sender instead of a valid response message.
-    //                         // Refer to Status::code and Status::message to examine possible error causes.
-    //                         println!("[Error] {:?}", err);
-    //                     }
-    //                 }
-    //             }
-    //         });
-    //     },
-    //     Err(err) => {
-    //         println!("{:?}", err);
-    //     }
-    // }
+    // TODO: try to return the client ???
+    match vehicle.subscribe_entries(vec!["Vehicle.Speed", "Vehicle.ADAS.ABS"]).await {
+        // how to keep the client (ValClient) alive
+        Ok(mut response_stream) => {
+            tokio::spawn(async move {
+                loop {
+                    match response_stream.message().await {
+                        Ok(response) => {
+                            match response {
+                                None => {
+                                    // The stream was closed by the sender
+                                    // and no more messages will be delivered
+                                    println!("[None] Server gone");
+                                    break;
+                                },
+                                Some(message) => {
+                                    // The sender streamed a valid response message val
+
+                                    println!("[Message]");
+
+                                    for entry in message.updates {
+                                        println!("\n{:?}\n", entry);
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            // a gRPC error was sent by the sender instead of a valid response message.
+                            // Refer to Status::code and Status::message to examine possible error causes.
+                            println!("[Error] {:?}", err);
+                        }
+                    }
+                }
+            });
+        },
+        Err(err) => {
+            println!("{:?}", err);
+        }
+    }
 }
