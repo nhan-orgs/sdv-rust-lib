@@ -23,7 +23,7 @@ impl KuksaClient {
         KuksaClient {
             server_address: server_address.to_string(),
             client: None,
-        }   
+        }
     }
 
     pub async fn connect(&mut self) -> Result<(), ClientError> {
@@ -323,26 +323,26 @@ impl KuksaClient {
         }
     }
 
-    pub async fn subscribe_entries(
-        &self,
-        entries_path: Vec<&str>,
+    pub async fn subscribe_entry(
+        &mut self,
+        entry_path: &str,
     ) -> Result<Streaming<SubscribeResponse>, ClientError> {
-        println!("------ subcribe entries:");
-        println!("entries_path: {:?}", entries_path);
+        println!("------ subcribe leaf entry:");
+        println!("entry_path: {}", entry_path);
 
-        // create ValClient
-        match ValClient::connect(self.server_address.clone()).await {
-            Ok(mut client) => {
-                // entries_path --> SubscribeRequest
-                let mut entries = Vec::new();
-
-                for entry_path in entries_path {
-                    entries.push(SubscribeEntry {
-                        path: entry_path.to_string(),
-                        view: View::CurrentValue.into(),
-                        fields: vec![Field::Value.into()],
-                    })
-                }
+        match self.client {
+            None => {
+                // TODO: connect to server
+                Err(ClientError::Connection(
+                    "Please connect to server".to_string(),
+                ))
+            }
+            Some(ref mut client) => {
+                let entries = vec![SubscribeEntry {
+                    path: entry_path.to_string(),
+                    view: View::CurrentValue.into(),
+                    fields: vec![Field::Value.into()],
+                }];
 
                 let request = SubscribeRequest { entries };
 
@@ -355,11 +355,6 @@ impl KuksaClient {
                         return Err(ClientError::Status(err));
                     }
                 }
-            }
-            Err(_) => {
-                return Err(ClientError::Connection(
-                    "Can not connect ValClient".to_string(),
-                ));
             }
         }
     }
