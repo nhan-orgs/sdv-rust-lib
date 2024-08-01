@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use tonic::transport::Channel;
 use tonic::Request;
 use tonic::Streaming;
 
@@ -14,103 +15,134 @@ use crate::common::{str_to_value, ClientError};
 
 pub struct KuksaClient {
     pub server_address: String,
+    client: Option<ValClient<Channel>>,
 }
 
 impl KuksaClient {
     pub fn new(server_address: &str) -> Self {
         KuksaClient {
             server_address: server_address.to_string(),
+            client: None,
+        }   
+    }
+
+    pub async fn connect(&mut self) -> Result<(), ClientError> {
+        match &self.client {
+            Some(_) => {
+                // already connected
+                return Ok(());
+            }
+            None => {
+                match ValClient::connect(self.server_address.clone()).await {
+                    Ok(client) => {
+                        self.client = Some(client);
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        return Err(ClientError::Connection(
+                            "Can not connect ValClient".to_string(),
+                        ));
+                    }
+                };
+            }
         }
     }
-    
+
     pub async fn get(
-        &self,
+        &mut self,
         path: &str,
         view: i32,
         fields: Vec<i32>,
     ) -> Result<Vec<DataEntry>, ClientError> {
-        if let Ok(mut client) = ValClient::connect(self.server_address.clone()).await {
-            let request = GetRequest {
-                entries: vec![EntryRequest {
-                    path: path.to_string(),
-                    view: view,
-                    fields: fields,
-                }],
-            };
+        match self.client {
+            None => {
+                // TODO: connect to server
+                Err(ClientError::Connection(
+                    "Please connect to server".to_string(),
+                ))
+            }
+            Some(ref mut client) => {
+                let request = GetRequest {
+                    entries: vec![EntryRequest {
+                        path: path.to_string(),
+                        view: view,
+                        fields: fields,
+                    }],
+                };
 
-            match client.get(Request::new(request)).await {
-                Ok(response) => {
-                    let message = response.into_inner();
+                match client.get(Request::new(request)).await {
+                    Ok(response) => {
+                        let message = response.into_inner();
 
-                    // collect errors from response
-                    let mut errors = vec![];
+                        // collect errors from response
+                        let mut errors = vec![];
 
-                    if let Some(err) = message.error {
-                        errors.push(err);
-                    }
-
-                    for error in message.errors {
-                        if let Some(err) = error.error {
+                        if let Some(err) = message.error {
                             errors.push(err);
                         }
-                    }
 
-                    // check if return error or entries' value
-                    if errors.len() > 0 {
-                        return Err(ClientError::Function(errors));
-                    } else {
-                        return Ok(message.entries);
+                        for error in message.errors {
+                            if let Some(err) = error.error {
+                                errors.push(err);
+                            }
+                        }
+
+                        // check if return error or entries' value
+                        if errors.len() > 0 {
+                            return Err(ClientError::Function(errors));
+                        } else {
+                            return Ok(message.entries);
+                        }
                     }
-                }
-                Err(error) => {
-                    return Err(ClientError::Status(error));
+                    Err(error) => {
+                        return Err(ClientError::Status(error));
+                    }
                 }
             }
-        } else {
-            return Err(ClientError::Connection(
-                "Can not connect ValClient".to_string(),
-            ));
         }
     }
 
-    pub async fn set(&self, entries: Vec<EntryUpdate>) -> Result<(), ClientError> {
-        if let Ok(mut client) = ValClient::connect(self.server_address.clone()).await {
-            let request = SetRequest { updates: entries };
+    pub async fn set(&mut self, entries: Vec<EntryUpdate>) -> Result<(), ClientError> {
+        match self.client {
+            None => {
+                return Err(ClientError::Connection(
+                    "Please connect to server".to_string(),
+                ))
+            }
+            Some(ref mut client) => {
+                let request = SetRequest { updates: entries };
 
-            match client.set(request).await {
-                Ok(response) => {
-                    let message = response.into_inner();
+                match client.set(request).await {
+                    Ok(response) => {
+                        let message = response.into_inner();
 
-                    // collect errors from response
-                    let mut errors = vec![];
+                        // collect errors from response
+                        let mut errors = vec![];
 
-                    if let Some(err) = message.error {
-                        errors.push(err);
-                    }
-
-                    for error in message.errors {
-                        if let Some(err) = error.error {
+                        if let Some(err) = message.error {
                             errors.push(err);
                         }
-                    }
 
-                    if errors.len() > 0 {
-                        return Err(ClientError::Function(errors));
-                    } else {
-                        return Ok(());
+                        for error in message.errors {
+                            if let Some(err) = error.error {
+                                errors.push(err);
+                            }
+                        }
+
+                        if errors.len() > 0 {
+                            return Err(ClientError::Function(errors));
+                        } else {
+                            return Ok(());
+                        }
                     }
+                    Err(err) => return Err(ClientError::Status(err)),
                 }
-                Err(err) => return Err(ClientError::Status(err)),
             }
-        } else {
-            Err(ClientError::Connection(
-                "Can not connect ValClient".to_string(),
-            ))
         }
     }
 
     pub async fn get_metadata(
-        &self,
+        &mut self,
         entry_path: &str,
     ) -> Result<HashMap<String, Metadata>, ClientError> {
         match self
@@ -141,7 +173,7 @@ impl KuksaClient {
     }
 
     pub async fn get_datatype(
-        &self,
+        &mut self,
         entry_path: &str,
     ) -> Result<HashMap<String, DataType>, ClientError> {
         match self.get_metadata(entry_path).await {
@@ -168,7 +200,7 @@ impl KuksaClient {
         }
     }
 
-    pub async fn get_entry_data(&self, path: &str) -> Result<Option<Datapoint>, ClientError> {
+    pub async fn get_entry_data(&mut self, path: &str) -> Result<Option<Datapoint>, ClientError> {
         // get data of a leaf entry
         println!("------ get_entry_data:");
         println!("entry_path: {:?}\n", path);
@@ -195,7 +227,7 @@ impl KuksaClient {
     }
 
     pub async fn get_entries_data(
-        &self,
+        &mut self,
         entries_path: Vec<&str>,
     ) -> Result<HashMap<String, Option<Datapoint>>, ClientError> {
         // get data of list entries
@@ -230,7 +262,7 @@ impl KuksaClient {
     }
 
     pub async fn publish_entry_data(
-        &self,
+        &mut self,
         entry_path: &str,
         value: &str,
     ) -> Result<(), ClientError> {
