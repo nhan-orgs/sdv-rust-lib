@@ -1,4 +1,4 @@
-use databroker_proto::kuksa::val::v1::{datapoint::Value, DataType, Datapoint, Error};
+pub use databroker_proto::kuksa::val::v1::{datapoint::Value, DataType, Datapoint, Error};
 
 #[derive(Debug, Clone)]
 pub enum ClientError {

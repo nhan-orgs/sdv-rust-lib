@@ -9,7 +9,7 @@ use databroker_proto::kuksa::val::v1::{DataEntry, DataType, Datapoint};
 use databroker_proto::kuksa::val::v1::{EntryRequest, EntryUpdate};
 use databroker_proto::kuksa::val::v1::{Field, Metadata, View};
 use databroker_proto::kuksa::val::v1::{GetRequest, SetRequest};
-use databroker_proto::kuksa::val::v1::{SubscribeEntry, SubscribeRequest, SubscribeResponse};
+pub use databroker_proto::kuksa::val::v1::{SubscribeEntry, SubscribeRequest, SubscribeResponse};
 
 use crate::common::{str_to_value, ClientError};
 
@@ -186,8 +186,8 @@ impl KuksaClient {
 
     pub async fn get_entry_data(&mut self, path: &str) -> Result<Option<Datapoint>, ClientError> {
         // get data of a leaf entry
-        println!("------ get_entry_data:");
-        println!("entry_path: {:?}\n", path);
+        // println!("------ get_entry_data:");
+        // println!("entry_path: {:?}\n", path);
 
         match self
             .get(path, View::CurrentValue.into(), vec![Field::Value.into()])
@@ -217,8 +217,8 @@ impl KuksaClient {
         // get data of list entries
         // return a hash map (path: value);
 
-        println!("------ get_entries_data:");
-        println!("entries_path: {:?}\n", entries_path);
+        // println!("------ get_entries_data:");
+        // println!("entries_path: {:?}\n", entries_path);
 
         let mut result = HashMap::new();
 
@@ -250,10 +250,10 @@ impl KuksaClient {
         entry_path: &str,
         value: &str,
     ) -> Result<(), ClientError> {
-        println!("------ publish_entry_data: ");
-        println!("entry_path: {:?}", entry_path);
-        println!("value: {:?}", value);
-        println!();
+        // println!("------ publish_entry_data: ");
+        // println!("entry_path: {:?}", entry_path);
+        // println!("value: {:?}", value);
+        // println!();
 
         let datatype = match self.get_datatype(entry_path).await {
             Ok(datatype) => datatype,
@@ -302,8 +302,8 @@ impl KuksaClient {
         &mut self,
         entry_path: &str,
     ) -> Result<Streaming<SubscribeResponse>, ClientError> {
-        println!("------ subcribe leaf entry:");
-        println!("entry_path: {}", entry_path);
+        // println!("------ subcribe leaf entry:");
+        // println!("entry_path: {}", entry_path);
 
         let client = match self.client {
             None => {
