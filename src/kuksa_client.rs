@@ -1,3 +1,4 @@
+use databroker_proto::kuksa::val::v1::EntryType;
 use std::collections::HashMap;
 use tonic::transport::Channel;
 use tonic::Request;
@@ -158,19 +159,20 @@ impl KuksaClient {
         }
     }
 
-    pub async fn get_datatype(
+    pub async fn datatype_from_metadata(
         &mut self,
-        entry_path: &str,
+        metadatas: &HashMap<String, Metadata>,
     ) -> Result<HashMap<String, DataType>, ClientError> {
-        let metadatas = match self.get_metadata(entry_path).await {
-            Ok(metadatas) => metadatas,
-            Err(error) => {
-                return Err(error);
-            }
-        };
+        // let metadatas = match self.get_metadata(entry_path).await {
+        //     Ok(metadatas) => metadatas,
+        //     Err(error) => {
+        //         return Err(error);
+        //     }
+        // };
 
         let mut result = HashMap::new();
 
+        // println!("{:?}", metadatas);
         for metadata in metadatas {
             let datatype = match DataType::try_from(metadata.1.data_type) {
                 Ok(datatype) => datatype,
@@ -178,7 +180,34 @@ impl KuksaClient {
                     return Err(ClientError::Function(vec![]));
                 }
             };
-            result.insert(metadata.0, datatype);
+            result.insert(metadata.0.to_owned(), datatype);
+        }
+
+        Ok(result)
+    }
+
+    pub async fn entrytype_from_metadata(
+        &mut self,
+        metadatas: &HashMap<String, Metadata>,
+    ) -> Result<HashMap<String, EntryType>, ClientError> {
+        // let metadatas = match self.get_metadata(entry_path).await {
+        //     Ok(metadatas) => metadatas,
+        //     Err(error) => {
+        //         return Err(error);
+        //     }
+        // };
+
+        let mut result = HashMap::new();
+
+        // println!("{:?}", metadatas);
+        for metadata in metadatas {
+            let entrytype = match EntryType::try_from(metadata.1.entry_type) {
+                Ok(entrytype) => entrytype,
+                Err(_error) => {
+                    return Err(ClientError::Function(vec![]));
+                }
+            };
+            result.insert(metadata.0.to_owned(), entrytype);
         }
 
         Ok(result)
@@ -255,7 +284,14 @@ impl KuksaClient {
         // println!("value: {:?}", value);
         // println!();
 
-        let datatype = match self.get_datatype(entry_path).await {
+        let metadatas = match self.get_metadata(entry_path).await {
+            Ok(metadatas) => metadatas,
+            Err(error) => {
+                return Err(error);
+            }
+        };
+
+        let datatype = match self.datatype_from_metadata(&metadatas).await {
             Ok(datatype) => datatype,
             Err(err) => {
                 // return METADATA error
@@ -292,6 +328,86 @@ impl KuksaClient {
                 }),
                 metadata: None,
                 actuator_target: None,
+            }),
+        };
+
+        self.set(vec![entry]).await
+    }
+
+    pub async fn set_target_value(
+        &mut self,
+        entry_path: &str,
+        value: &str,
+    ) -> Result<(), ClientError> {
+        // println!("------ set_target_value: ");
+        // println!("entry_path: {:?}", entry_path);
+        // println!("value: {:?}", value);
+        // println!();
+
+        // check if entry is an actuator
+        let metadatas = match self.get_metadata(entry_path).await {
+            Ok(metadatas) => metadatas,
+            Err(error) => {
+                return Err(error);
+            }
+        };
+
+        let entrytype = match self.entrytype_from_metadata(&metadatas).await {
+            Ok(entrytype) => entrytype,
+            Err(err) => {
+                // return METADATA error
+                return Err(err);
+            }
+        };
+
+        match entrytype.get(entry_path) {
+            Some(EntryType::Actuator) => {}
+            _ => {
+                return Err(ClientError::Function(vec![Error {
+                    code: 401,
+                    reason: "Entry is not an actuator".to_string(),
+                    message: "Entry is not an actuator".to_string(),
+                }]));
+            }
+        }
+
+        let datatype = match self.datatype_from_metadata(&metadatas).await {
+            Ok(datatype) => datatype,
+            Err(err) => {
+                // return METADATA error
+                return Err(err);
+            }
+        };
+
+        if !datatype.contains_key(entry_path) {
+            return Err(ClientError::Function(vec![Error {
+                code: 401,
+                reason: "Error retrieve metadata".to_string(),
+                message: "Can not found metadata for path, path maybe not a leaf entry".to_string(),
+            }]));
+        }
+
+        let entry_value = match str_to_value(value, datatype[entry_path]) {
+            Ok(entry_value) => entry_value,
+            Err(_) => {
+                return Err(ClientError::Function(vec![Error {
+                    code: 400,
+                    reason: "Convert data value error".to_string(),
+                    message: "Can not convert string to {$datatype}".to_string(),
+                }]));
+            }
+        };
+
+        let entry = EntryUpdate {
+            fields: vec![Field::ActuatorTarget as i32],
+            entry: Some(DataEntry {
+                path: entry_path.to_string(),
+                value: None,
+                metadata: None,
+                actuator_target: Some(Datapoint {
+                    timestamp: Some(std::time::SystemTime::now().into()),
+                    value: Some(entry_value),
+                }),
             }),
         };
 
