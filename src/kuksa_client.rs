@@ -1,18 +1,18 @@
-use databroker_proto::kuksa::val::v1::EntryType;
 use std::collections::HashMap;
 use tonic::transport::Channel;
 use tonic::Request;
 use tonic::Streaming;
 
 use databroker_proto::kuksa::val::v1::val_client::ValClient;
+use databroker_proto::kuksa::val::v1::EntryType;
 use databroker_proto::kuksa::val::v1::Error;
-use databroker_proto::kuksa::val::v1::{DataEntry, DataType, Datapoint};
+use databroker_proto::kuksa::val::v1::{DataEntry, Datapoint};
 use databroker_proto::kuksa::val::v1::{EntryRequest, EntryUpdate};
 use databroker_proto::kuksa::val::v1::{Field, Metadata, View};
 use databroker_proto::kuksa::val::v1::{GetRequest, SetRequest};
 pub use databroker_proto::kuksa::val::v1::{SubscribeEntry, SubscribeRequest, SubscribeResponse};
 
-use crate::common::{str_to_value, ClientError};
+use crate::common::{datatype_from_metadata, entrytype_from_metadata, str_to_value, ClientError};
 
 pub struct KuksaClient {
     pub server_address: String,
@@ -128,6 +128,59 @@ impl KuksaClient {
         }
     }
 
+    pub async fn subscribe(
+        &mut self,
+        entries: Vec<SubscribeEntry>,
+    ) -> Result<Streaming<SubscribeResponse>, ClientError> {
+        let client = match self.client {
+            None => {
+                // TODO: connect to server
+                return Err(ClientError::Connection(
+                    "Please connect to server".to_string(),
+                ));
+            }
+            Some(ref mut client) => client,
+        };
+
+        let request = SubscribeRequest { entries };
+
+        // call subcribes method
+        match client.subscribe(request).await {
+            Ok(response) => {
+                return Ok(response.into_inner());
+            }
+            Err(err) => {
+                return Err(ClientError::Status(err));
+            }
+        }
+    }
+
+    pub async fn is_actuator(&mut self, path: &str) -> Result<(), ClientError> {
+        let metadatas = match self.get_metadata(path).await {
+            Ok(metadatas) => metadatas,
+            Err(error) => {
+                return Err(error);
+            }
+        };
+
+        let entrytype = match entrytype_from_metadata(&metadatas).await {
+            Ok(entrytype) => entrytype,
+            Err(err) => {
+                // return METADATA error
+                return Err(err);
+            }
+        };
+
+        match entrytype.get(path) {
+            Some(EntryType::Actuator) => Ok(()),
+            _ => Err(ClientError::Function(vec![Error {
+                code: 401,
+                reason: "Entry is not an actuator".to_string(),
+                message: "Entry is not an actuator".to_string(),
+            }])),
+        }
+    }
+
     pub async fn get_metadata(
         &mut self,
         entry_path: &str,
@@ -159,65 +212,10 @@ impl KuksaClient {
         }
     }
 
-    pub async fn datatype_from_metadata(
+    pub async fn get_current_value(
         &mut self,
-        metadatas: &HashMap<String, Metadata>,
-    ) -> Result<HashMap<String, DataType>, ClientError> {
-        // let metadatas = match self.get_metadata(entry_path).await {
-        //     Ok(metadatas) => metadatas,
-        //     Err(error) => {
-        //         return Err(error);
-        //     }
-        // };
-
-        let mut result = HashMap::new();
-
-        // println!("{:?}", metadatas);
-        for metadata in metadatas {
-            let datatype = match DataType::try_from(metadata.1.data_type) {
-                Ok(datatype) => datatype,
-                Err(_error) => {
-                    return Err(ClientError::Function(vec![]));
-                }
-            };
-            result.insert(metadata.0.to_owned(), datatype);
-        }
-
-        Ok(result)
-    }
-
-    pub async fn entrytype_from_metadata(
-        &mut self,
-        metadatas: &HashMap<String, Metadata>,
-    ) -> Result<HashMap<String, EntryType>, ClientError> {
-        // let metadatas = match self.get_metadata(entry_path).await {
-        //     Ok(metadatas) => metadatas,
-        //     Err(error) => {
-        //         return Err(error);
-        //     }
-        // };
-
-        let mut result = HashMap::new();
-
-        // println!("{:?}", metadatas);
-        for metadata in metadatas {
-            let entrytype = match EntryType::try_from(metadata.1.entry_type) {
-                Ok(entrytype) => entrytype,
-                Err(_error) => {
-                    return Err(ClientError::Function(vec![]));
-                }
-            };
-            result.insert(metadata.0.to_owned(), entrytype);
-        }
-
-        Ok(result)
-    }
-
-    pub async fn get_entry_data(&mut self, path: &str) -> Result<Option<Datapoint>, ClientError> {
-        // get data of a leaf entry
-        // println!("------ get_entry_data:");
-        // println!("entry_path: {:?}\n", path);
-
+        path: &str,
+    ) -> Result<Option<Datapoint>, ClientError> {
         match self
             .get(path, View::CurrentValue.into(), vec![Field::Value.into()])
             .await
@@ -239,51 +237,39 @@ impl KuksaClient {
         }
     }
 
-    pub async fn get_entries_data(
-        &mut self,
-        entries_path: Vec<&str>,
-    ) -> Result<HashMap<String, Option<Datapoint>>, ClientError> {
-        // get data of list entries
-        // return a hash map (path: value);
+    pub async fn get_target_value(&mut self, path: &str) -> Result<Option<Datapoint>, ClientError> {
+        self.is_actuator(path).await?;
 
-        // println!("------ get_entries_data:");
-        // println!("entries_path: {:?}\n", entries_path);
-
-        let mut result = HashMap::new();
-
-        for entry_path in entries_path {
-            match self
-                .get(
-                    entry_path,
-                    View::CurrentValue.into(),
-                    vec![Field::Value.into()],
-                )
-                .await
-            {
-                Ok(entries) => {
-                    for entry in entries {
-                        result.insert(entry.path, entry.value);
-                    }
-                }
-                Err(error) => {
-                    return Err(error);
+        match self
+            .get(
+                path,
+                View::TargetValue.into(),
+                vec![Field::ActuatorTarget.into()],
+            )
+            .await
+        {
+            Ok(entries) => {
+                if entries.len() != 1 {
+                    return Err(ClientError::Function(vec![Error {
+                        code: 400,
+                        reason: "Path is not a leaf entry".to_string(),
+                        message: "Ensure your path is a sensor/actuator".to_string(),
+                    }]));
+                } else {
+                    return Ok(entries[0].actuator_target.clone());
                 }
             }
+            Err(error) => {
+                return Err(error);
+            }
         }
-
-        Ok(result)
     }
 
-    pub async fn publish_entry_data(
+    pub async fn set_current_value(
         &mut self,
         entry_path: &str,
         value: &str,
     ) -> Result<(), ClientError> {
-        // println!("------ publish_entry_data: ");
-        // println!("entry_path: {:?}", entry_path);
-        // println!("value: {:?}", value);
-        // println!();
-
         let metadatas = match self.get_metadata(entry_path).await {
             Ok(metadatas) => metadatas,
             Err(error) => {
@@ -291,7 +277,7 @@ impl KuksaClient {
             }
         };
 
-        let datatype = match self.datatype_from_metadata(&metadatas).await {
+        let datatype = match datatype_from_metadata(&metadatas).await {
             Ok(datatype) => datatype,
             Err(err) => {
                 // return METADATA error
@@ -307,16 +293,7 @@ impl KuksaClient {
             }]));
         }
 
-        let entry_value = match str_to_value(value, datatype[entry_path]) {
-            Ok(entry_value) => entry_value,
-            Err(_) => {
-                return Err(ClientError::Function(vec![Error {
-                    code: 400,
-                    reason: "Convert data value error".to_string(),
-                    message: "Can not convert string to {$datatype}".to_string(),
-                }]));
-            }
-        };
+        let entry_value = str_to_value(value, datatype[entry_path])?;
 
         let entry = EntryUpdate {
             fields: vec![Field::Value as i32],
@@ -339,12 +316,8 @@ impl KuksaClient {
         entry_path: &str,
         value: &str,
     ) -> Result<(), ClientError> {
-        // println!("------ set_target_value: ");
-        // println!("entry_path: {:?}", entry_path);
-        // println!("value: {:?}", value);
-        // println!();
+        self.is_actuator(entry_path).await?;
 
-        // check if entry is an actuator
         let metadatas = match self.get_metadata(entry_path).await {
             Ok(metadatas) => metadatas,
             Err(error) => {
@@ -352,26 +325,7 @@ impl KuksaClient {
             }
         };
 
-        let entrytype = match self.entrytype_from_metadata(&metadatas).await {
-            Ok(entrytype) => entrytype,
-            Err(err) => {
-                // return METADATA error
-                return Err(err);
-            }
-        };
-
-        match entrytype.get(entry_path) {
-            Some(EntryType::Actuator) => {}
-            _ => {
-                return Err(ClientError::Function(vec![Error {
-                    code: 401,
-                    reason: "Entry is not an actuator".to_string(),
-                    message: "Entry is not an actuator".to_string(),
-                }]));
-            }
-        }
-
-        let datatype = match self.datatype_from_metadata(&metadatas).await {
+        let datatype = match datatype_from_metadata(&metadatas).await {
             Ok(datatype) => datatype,
             Err(err) => {
                 // return METADATA error
@@ -387,16 +341,7 @@ impl KuksaClient {
             }]));
         }
 
-        let entry_value = match str_to_value(value, datatype[entry_path]) {
-            Ok(entry_value) => entry_value,
-            Err(_) => {
-                return Err(ClientError::Function(vec![Error {
-                    code: 400,
-                    reason: "Convert data value error".to_string(),
-                    message: "Can not convert string to {$datatype}".to_string(),
-                }]));
-            }
-        };
+        let entry_value = str_to_value(value, datatype[entry_path])?;
 
         let entry = EntryUpdate {
             fields: vec![Field::ActuatorTarget as i32],
@@ -414,39 +359,32 @@ impl KuksaClient {
         self.set(vec![entry]).await
     }
 
-    pub async fn subscribe_entry(
+    pub async fn subscribe_current_value(
         &mut self,
         entry_path: &str,
     ) -> Result<Streaming<SubscribeResponse>, ClientError> {
-        // println!("------ subcribe leaf entry:");
-        // println!("entry_path: {}", entry_path);
-
-        let client = match self.client {
-            None => {
-                // TODO: connect to server
-                return Err(ClientError::Connection(
-                    "Please connect to server".to_string(),
-                ));
-            }
-            Some(ref mut client) => client,
-        };
-
         let entries = vec![SubscribeEntry {
             path: entry_path.to_string(),
             view: View::CurrentValue.into(),
             fields: vec![Field::Value.into()],
         }];
 
-        let request = SubscribeRequest { entries };
-
         // call subcribes method
-        match client.subscribe(request).await {
-            Ok(response) => {
-                return Ok(response.into_inner());
-            }
-            Err(err) => {
-                return Err(ClientError::Status(err));
-            }
-        }
+        self.subscribe(entries).await
+    }
+
+    pub async fn subscribe_target_value(
+        &mut self,
+        entry_path: &str,
+    ) -> Result<Streaming<SubscribeResponse>, ClientError> {
+        self.is_actuator(entry_path).await?;
+
+        let entries = vec![SubscribeEntry {
+            path: entry_path.to_string(),
+            view: View::TargetValue.into(),
+            fields: vec![Field::ActuatorTarget.into()],
+        }];
+
+        self.subscribe(entries).await
     }
 }
