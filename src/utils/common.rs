@@ -80,13 +80,11 @@ pub fn str_to_value(input: &str, datatype: DataType) -> Result<Value, ClientErro
     }
 }
 
-pub fn value_from_option_datapoint(datapoint: Option<Datapoint>) -> Value {
+pub fn value_from_datapoint(datapoint: Option<Datapoint>) -> Option<Value> {
     if let Some(data) = datapoint {
-        if let Some(value) = data.value {
-            return value;
-        }
+        return data.value;
     }
-    return Value::String("NotAvailable".to_string());
+    return None;
 }
 
 pub async fn datatype_from_metadata(

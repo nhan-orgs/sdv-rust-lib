@@ -48,7 +48,7 @@ This library contains 2 main modules: `KuksaClient` and `utils::common`
 |-------|-----|
 | ClientError                 | an enum, specifies which type of error occurs                                      |
 | str_to_value                | convert str type to Value type, use in KuksaClient; eg: ("bool", Boolean) --> bool |
-| value_from_option_datapoint | extract Value from Option<Datapoint> - which are returned from get methods         |
+| value_from_datapoint | extract Value from Option<Datapoint> - which are returned from get methods         |
 | datatype_from_metadata      | get Datatype (String, Bool,...) of a signal from its metadata                      |
 | entrytype_from_metadata     | get Entrytype (Sensor, Actuator,...) of a signal from its metadata                  |
 
