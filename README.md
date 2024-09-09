@@ -1,7 +1,7 @@
 # sdv-rust-lib
 > Github: https://github.com/nhan-orgs/sdv-rust-lib
 
-This KuksaClient run on Kuksa Databroker version 0.3.0
+This KuksaClient run on Kuksa Databroker version `0.3.0`
 
 ## 1. Project structure
 
